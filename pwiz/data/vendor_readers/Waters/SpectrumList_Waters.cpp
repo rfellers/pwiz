@@ -182,7 +182,10 @@ PWIZ_API_DECL SpectrumPtr SpectrumList_Waters::spectrum(size_t index, DetailLeve
         result->defaultArrayLength = rawdata_->GetScanStat<int>(ie.function, ie.scan, MassLynxScanItem::PEAKS_IN_SCAN);
     }
     else
+    {
+        result->set(MS_total_ion_current, rawdata_->TicByFunctionIndex()[ie.function].at(ie.block));
         result->defaultArrayLength = 0;
+    }
 
     float minMZ, maxMZ;
     rawdata_->Info.GetAcquisitionMassRange(ie.function, minMZ, maxMZ);
@@ -246,7 +249,7 @@ PWIZ_API_DECL SpectrumPtr SpectrumList_Waters::spectrum(size_t index, DetailLeve
         else // not ion mobility
         {
             if (detailLevel != DetailLevel_FullMetadata)
-                binaryDataSource.lock()->ScanReader.ReadScan(ie.function, ie.scan, masses, intensities);
+                binaryDataSource.lock()->Reader.ReadScan(ie.function, ie.scan, masses, intensities);
         }
 
         vector<double> mzArray(masses.begin(), masses.end());
@@ -257,6 +260,21 @@ PWIZ_API_DECL SpectrumPtr SpectrumList_Waters::spectrum(size_t index, DetailLeve
     return result;
 }
 
+
+PWIZ_API_DECL bool SpectrumList_Waters::hasSonarFunctions() const
+{
+    for (int function : rawdata_->FunctionIndexList())
+        if (rawdata_->SonarEnabledByFunctionIndex()[function])
+            return true;
+    return false;
+}
+
+PWIZ_API_DECL pair<int, int> SpectrumList_Waters::sonarMzToDriftBinRange(int function, float precursorMz, float precursorTolerance) const
+{
+    pair<int, int> binRange;
+    rawdata_->Info.GetSonarRange(function, precursorMz, precursorTolerance, binRange.first, binRange.second);
+    return binRange;
+}
 
 PWIZ_API_DECL void SpectrumList_Waters::initializeCoefficients() const
 {
@@ -357,7 +375,7 @@ PWIZ_API_DECL void SpectrumList_Waters::createIndex()
         try { translateFunctionType(WatersToPwizFunctionType(rawdata_->Info.GetFunctionType(function)), msLevel, spectrumType); }
         catch(...) // unable to translate function type
         {
-            cerr << "[SpectrumList_Waters::createIndex] Unable to translate function type \"" + rawdata_->Info.GetFunctionTypeString(function) + "\"" << endl;
+            cerr << "[SpectrumList_Waters::createIndex] Unable to translate function type \"" + rawdata_->Info.GetFunctionTypeString(rawdata_->Info.GetFunctionType(function)) + "\"" << endl;
             continue;
         }
 
@@ -399,7 +417,7 @@ PWIZ_API_DECL void SpectrumList_Waters::createIndex()
     typedef pair<int, int> FunctionScanPair;
     BOOST_FOREACH_FIELD((float rt)(const FunctionScanPair& functionScanPair), functionAndScanByRetentionTime)
     {
-        if (rawdata_->IonMobilityByFunctionIndex()[functionScanPair.first])
+        if (!config_.combineIonMobilitySpectra && rawdata_->IonMobilityByFunctionIndex()[functionScanPair.first])
         {
             for (int j = 0; j < numScansInBlock; ++j)
             {

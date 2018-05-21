@@ -36,7 +36,7 @@
 #include <fstream>
 
 //#include "MassLynxRawDataFile.h"
-#include "MassLynxRawReader.hpp"
+#include "MassLynxRawBase.hpp"
 #include "MassLynxRawScanReader.hpp"
 #include "MassLynxRawChromatogramReader.hpp"
 #include "MassLynxRawInfoReader.hpp"
@@ -92,9 +92,8 @@ class MassLynxRawProcessorWithProgress : public MassLynxRawProcessor
 
 struct PWIZ_API_DECL RawData
 {
-    mutable MassLynxRawReader Reader;
-    MassLynxRawInfo Info;
-    MassLynxRawScanReader ScanReader;
+    mutable Extended::MassLynxRawScanReader Reader;
+    Extended::MassLynxRawInfo Info;
     MassLynxRawChromatogramReader ChromatogramReader;
 
     struct CachedCompressedDataCluster : public MassLynxRawScanReader
@@ -105,6 +104,10 @@ struct PWIZ_API_DECL RawData
     const string& RawFilepath() const {return rawpath_;}
     const vector<int>& FunctionIndexList() const {return functionIndexList;}
     const vector<bool>& IonMobilityByFunctionIndex() const {return ionMobilityByFunctionIndex;}
+    const vector<bool>& SonarEnabledByFunctionIndex() const {return sonarEnabledByFunctionIndex;}
+
+    const vector<vector<float>>& TimesByFunctionIndex() const {return timesByFunctionIndex;}
+    const vector<vector<float>>& TicByFunctionIndex() const {return ticByFunctionIndex;}
 
     size_t FunctionCount() const {return functionIndexList.size();}
     size_t LastFunctionIndex() const {return lastFunctionIndex_; }
@@ -112,7 +115,6 @@ struct PWIZ_API_DECL RawData
     RawData(const string& rawpath, IterationListenerRegistry* ilr = nullptr)
         : Reader(rawpath),
           Info(Reader),
-          ScanReader(Reader),
           ChromatogramReader(Reader),
           PeakPicker(rawpath, ilr),
           rawpath_(rawpath),
@@ -140,6 +142,9 @@ struct PWIZ_API_DECL RawData
         PeakPicker.SetNumSpectra(numSpectra_);
 
         ionMobilityByFunctionIndex.resize(lastFunctionIndex_ + 1, false);
+        sonarEnabledByFunctionIndex.resize(lastFunctionIndex_ + 1, false);
+        timesByFunctionIndex.resize(lastFunctionIndex_ + 1);
+        ticByFunctionIndex.resize(lastFunctionIndex_ + 1);
         for (auto& itr : functionFilepathByNumber)
         {
             ionMobilityByFunctionIndex[itr.first] = bfs::exists(itr.second.replace_extension(".cdt"));
@@ -147,7 +152,12 @@ struct PWIZ_API_DECL RawData
             {
                 shared_ptr<CachedCompressedDataCluster>& cdc = cdcByFunction[itr.first];
                 cdc.reset(new CachedCompressedDataCluster(Reader));
+
+                // only IMS functions could have SONAR enabled, right?
+                sonarEnabledByFunctionIndex[itr.first] = lexical_cast<bool>(Info.GetScanItem(itr.first, 0, MassLynxScanItem::SONAR_ENABLED));
             }
+
+            ChromatogramReader.ReadTICChromatogram(itr.first, timesByFunctionIndex[itr.first], ticByFunctionIndex[itr.first]);
         }
 
         initHeaderProps(rawpath);
@@ -328,6 +338,9 @@ struct PWIZ_API_DECL RawData
     vector<int> functionIndexList;
     size_t lastFunctionIndex_;
     vector<bool> ionMobilityByFunctionIndex;
+    vector<bool> sonarEnabledByFunctionIndex;
+    vector<vector<float>> timesByFunctionIndex;
+    vector<vector<float>> ticByFunctionIndex;
     map<string, string> headerProps;
     int numSpectra_; // not separated by ion mobility
 
@@ -396,7 +409,7 @@ enum PWIZ_API_DECL PwizFunctionType
 };
 
 
-inline PwizFunctionType WatersToPwizFunctionType(int functionType)
+inline PwizFunctionType WatersToPwizFunctionType(MassLynxFunctionType functionType)
 {
     return (PwizFunctionType) functionType;
 }
@@ -438,7 +451,7 @@ enum IonMode {
 };
 
 
-inline PwizIonizationType WatersToPwizIonizationType(int ionMode)
+inline PwizIonizationType WatersToPwizIonizationType(MassLynxIonMode ionMode)
 {
     switch ((IonMode) ionMode)
     {
@@ -457,7 +470,7 @@ enum PWIZ_API_DECL PwizPolarityType
 };
 
 
-inline PwizPolarityType WatersToPwizPolarityType(int ionMode)
+inline PwizPolarityType WatersToPwizPolarityType(MassLynxIonMode ionMode)
 {
     switch ((IonMode) ionMode)
     {

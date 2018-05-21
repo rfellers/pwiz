@@ -41,25 +41,27 @@ using namespace pwiz::util;
 
 PWIZ_API_DECL
 SpectrumList_IonMobility::SpectrumList_IonMobility(const msdata::SpectrumListPtr& inner)
-:   SpectrumListWrapper(inner), equipment_(SpectrumList_IonMobility::eIonMobilityEquipment::None)
+:   SpectrumListWrapper(inner), equipment_(SpectrumList_IonMobility::IonMobilityEquipment::None)
 {
-    units_ = eIonMobilityUnits::none;
+    units_ = IonMobilityUnits::none;
     if (dynamic_cast<detail::SpectrumList_Agilent*>(&*inner) != NULL)
     {
-        equipment_ = eIonMobilityEquipment::AgilentDrift;
-        units_ = eIonMobilityUnits::drift_time_msec;
+        equipment_ = IonMobilityEquipment::AgilentDrift;
+        units_ = IonMobilityUnits::drift_time_msec;
     }
     else if (dynamic_cast<detail::SpectrumList_Waters*>(&*inner) != NULL)
     {
-        equipment_ = eIonMobilityEquipment::WatersDrift;
-        units_ = eIonMobilityUnits::drift_time_msec; 
+        units_ = IonMobilityUnits::drift_time_msec;
+
+        auto waters = dynamic_cast<detail::SpectrumList_Waters*>(&*inner);
+        equipment_ = waters->hasSonarFunctions() ? IonMobilityEquipment::WatersSonar : IonMobilityEquipment::WatersDrift;
     }
     else if (dynamic_cast<detail::SpectrumList_Bruker*>(&*inner) != NULL)
     {
         if ((dynamic_cast<detail::SpectrumList_Bruker*>(&*inner))->hasIonMobility())
         {
-            equipment_ = eIonMobilityEquipment::BrukerTIMS;
-            units_ = eIonMobilityUnits::inverse_reduced_ion_mobility_Vsec_per_cm2;
+            equipment_ = IonMobilityEquipment::BrukerTIMS;
+            units_ = IonMobilityUnits::inverse_reduced_ion_mobility_Vsec_per_cm2;
         }
     }
     else // reading an mzML conversion?
@@ -73,11 +75,11 @@ SpectrumList_IonMobility::SpectrumList_IonMobility(const msdata::SpectrumListPtr
                 Scan dummy;
                 Scan& scan = spectrum->scanList.scans.empty() ? dummy : spectrum->scanList.scans[0];
                 if (scan.hasCVParam(CVID::MS_ion_mobility_drift_time))
-                    units_ = eIonMobilityUnits::drift_time_msec;
+                    units_ = IonMobilityUnits::drift_time_msec;
                 else if (scan.hasCVParam(CVID::MS_inverse_reduced_ion_mobility))
-                    units_ = eIonMobilityUnits::inverse_reduced_ion_mobility_Vsec_per_cm2;
+                    units_ = IonMobilityUnits::inverse_reduced_ion_mobility_Vsec_per_cm2;
                 else if (!scan.userParam("drift time").empty()) // Oldest known mzML drift time style
-                    units_ = eIonMobilityUnits::drift_time_msec;
+                    units_ = IonMobilityUnits::drift_time_msec;
             }
         }
         catch (...)
@@ -87,7 +89,7 @@ SpectrumList_IonMobility::SpectrumList_IonMobility(const msdata::SpectrumListPtr
     }
 }
 
-PWIZ_API_DECL SpectrumList_IonMobility::eIonMobilityUnits SpectrumList_IonMobility::getIonMobilityUnits() const
+PWIZ_API_DECL SpectrumList_IonMobility::IonMobilityUnits SpectrumList_IonMobility::getIonMobilityUnits() const
 {
     return units_;
 }
@@ -102,7 +104,7 @@ PWIZ_API_DECL SpectrumPtr SpectrumList_IonMobility::spectrum(size_t index, bool 
     return inner_->spectrum(index, getBinaryData);
 }
 
-PWIZ_API_DECL bool SpectrumList_IonMobility::canConvertIonMobilityAndCCS(eIonMobilityUnits units) const
+PWIZ_API_DECL bool SpectrumList_IonMobility::canConvertIonMobilityAndCCS(IonMobilityUnits units) const
 {
     if (units != units_)
         return false; // wrong units for this equipment
@@ -112,10 +114,10 @@ PWIZ_API_DECL bool SpectrumList_IonMobility::canConvertIonMobilityAndCCS(eIonMob
     default:
         return false; // Only Agilent and Bruker provide this capabilty, for now
 
-    case eIonMobilityEquipment::BrukerTIMS:
+    case IonMobilityEquipment::BrukerTIMS:
         return dynamic_cast<detail::SpectrumList_Bruker*>(&*inner_)->canConvertInverseK0AndCCS();
 
-    case eIonMobilityEquipment::AgilentDrift:
+    case IonMobilityEquipment::AgilentDrift:
         return dynamic_cast<detail::SpectrumList_Agilent*>(&*inner_)->canConvertDriftTimeAndCCS();
     }
 }
@@ -127,9 +129,9 @@ PWIZ_API_DECL double SpectrumList_IonMobility::ionMobilityToCCS(double ionMobili
         default:
             throw runtime_error("SpectrumList_IonMobility::ionMobilityToCCS function only supported when reading native Agilent or Bruker files with ion-mobility data");
 
-        case eIonMobilityEquipment::BrukerTIMS:  return dynamic_cast<detail::SpectrumList_Bruker*>(&*inner_)->inverseK0ToCCS(ionMobility, mz, charge);
+        case IonMobilityEquipment::BrukerTIMS:  return dynamic_cast<detail::SpectrumList_Bruker*>(&*inner_)->inverseK0ToCCS(ionMobility, mz, charge);
 
-        case eIonMobilityEquipment::AgilentDrift: return dynamic_cast<detail::SpectrumList_Agilent*>(&*inner_)->driftTimeToCCS(ionMobility, mz, charge);
+        case IonMobilityEquipment::AgilentDrift: return dynamic_cast<detail::SpectrumList_Agilent*>(&*inner_)->driftTimeToCCS(ionMobility, mz, charge);
     }
 }
 
@@ -141,12 +143,22 @@ PWIZ_API_DECL double SpectrumList_IonMobility::ccsToIonMobility(double ccs, doub
         default:
             throw runtime_error("SpectrumList_IonMobility::ccsToIonMobility] function only supported when reading native Agilent or Bruker files with ion-mobility data");
 
-        case eIonMobilityEquipment::BrukerTIMS:  
+        case IonMobilityEquipment::BrukerTIMS:  
             return dynamic_cast<detail::SpectrumList_Bruker*>(&*inner_)->ccsToInverseK0(ccs, mz, charge);
-        case eIonMobilityEquipment::AgilentDrift: 
+        case IonMobilityEquipment::AgilentDrift: 
             return dynamic_cast<detail::SpectrumList_Agilent*>(&*inner_)->ccsToDriftTime(ccs, mz, charge);
     }
 }
+
+PWIZ_API_DECL std::pair<int, int> SpectrumList_IonMobility::sonarMzToDriftBinRange(int function, float precursorMz, float precursorTolerance) const
+{
+    if (equipment_ != IonMobilityEquipment::WatersSonar)
+        throw runtime_error("SpectrumList_IonMobility::sonarMzToDriftBinRange] function only works on Waters SONAR data");
+
+    auto waters = dynamic_cast<detail::SpectrumList_Waters*>(&*inner_);
+    return waters->sonarMzToDriftBinRange(function, precursorMz, precursorTolerance);
+}
+
 
 } // namespace analysis 
 } // namespace pwiz
