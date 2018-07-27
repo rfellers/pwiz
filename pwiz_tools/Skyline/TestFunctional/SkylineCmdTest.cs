@@ -24,18 +24,20 @@ using pwiz.SkylineTestUtil;
 
 namespace pwiz.SkylineTestFunctional
 {
+    /// <summary>
+    /// Test the SkylineCmd.exe command-line executable by running it in a separate process.
+    /// No idea why this was originally written as a functional test, but I changed it to a unit test
+    /// when I fixed its handle leaking problem using ShellExecute = false. -brendan
+    /// </summary>
     [TestClass]
-    public class SkylineCmdTest : AbstractFunctionalTest
+    public class SkylineCmdTest : AbstractUnitTest
     {
         [TestMethod]
         public void TestSkylineCmd()
         {
             TestFilesZip = @"TestFunctional/SkylineCmdTest.zip";
-            RunFunctionalTest();
-        }
+            TestFilesDir = new TestFilesDir(TestContext, TestFilesZip);
 
-        protected override void DoTest()
-        {
             // failure to start
             {
                 var process = Process.Start(GetProcessStartInfo("--invalidargument"));
@@ -64,12 +66,12 @@ namespace pwiz.SkylineTestFunctional
 
         private ProcessStartInfo GetProcessStartInfo(string arguments)
         {
-            var processStartInfo = new ProcessStartInfo(FindSkylineCmdExe(), arguments);
-            if (Program.SkylineOffscreen)
+            return new ProcessStartInfo(FindSkylineCmdExe())
             {
-                processStartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-            }
-            return processStartInfo;
+                Arguments = arguments,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            };
         }
 
         private static string FindSkylineCmdExe()
