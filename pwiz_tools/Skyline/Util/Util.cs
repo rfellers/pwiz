@@ -2029,23 +2029,23 @@ namespace pwiz.Skyline.Util
                 LocalizationHelper.InitThread(); // Ensure appropriate culture
                 body(i);
             };
-            LoopWithExceptionHandling(() =>
-            {
-                using (var worker = new QueueWorker<IntHolder>(null, (h, i) => localBody(h.TheInt)))
-                {
-                    worker.RunAsync(GetThreadCount(maxThreads), typeof(ParallelEx).Name);
-                    for (int i = fromInclusive; i < toExclusive; i++)
-                    {
-                        if (worker.Exception != null)
-                            break;
-                        worker.Add(new IntHolder(i));
-                    }
-                    worker.DoneAdding(true);
-                    if (worker.Exception != null)
-                        throw new AggregateException("Exception in Parallel.For", worker.Exception);    // Not L10N
-                }
-            }, catchClause);
-//            LoopWithExceptionHandling(() => Parallel.For(fromInclusive, toExclusive, PARALLEL_OPTIONS, localBody), catchClause);
+//            LoopWithExceptionHandling(() =>
+//            {
+//                using (var worker = new QueueWorker<IntHolder>(null, (h, i) => localBody(h.TheInt)))
+//                {
+//                    worker.RunAsync(GetThreadCount(maxThreads), typeof(ParallelEx).Name);
+//                    for (int i = fromInclusive; i < toExclusive; i++)
+//                    {
+//                        if (worker.Exception != null)
+//                            break;
+//                        worker.Add(new IntHolder(i));
+//                    }
+//                    worker.DoneAdding(true);
+//                    if (worker.Exception != null)
+//                        throw new AggregateException("Exception in Parallel.For", worker.Exception);    // Not L10N
+//                }
+//            }, catchClause);
+            LoopWithExceptionHandling(() => Parallel.For(fromInclusive, toExclusive, PARALLEL_OPTIONS, localBody), catchClause);
         }
 
         public static void ForEach<TSource>(IEnumerable<TSource> source, Action<TSource> body, Action<AggregateException> catchClause = null, int? maxThreads = null) where TSource : class
@@ -2055,23 +2055,23 @@ namespace pwiz.Skyline.Util
                 LocalizationHelper.InitThread(); // Ensure appropriate culture
                 body(o);
             };
-            LoopWithExceptionHandling(() =>
-            {
-                using (var worker = new QueueWorker<TSource>(null, (s, i) => localBody(s)))
-                {
-                    worker.RunAsync(GetThreadCount(maxThreads), typeof(ParallelEx).Name);
-                    foreach (TSource s in source)
-                    {
-                        if (worker.Exception != null)
-                            break;
-                        worker.Add(s);
-                    }
-                    worker.DoneAdding(true);
-                    if (worker.Exception != null)
-                        throw new AggregateException("Exception in Parallel.ForEx", worker.Exception);  // Not L10N
-                }
-            }, catchClause);
-//            LoopWithExceptionHandling(() => Parallel.ForEach(source, PARALLEL_OPTIONS, localBody), catchClause);
+//            LoopWithExceptionHandling(() =>
+//            {
+//                using (var worker = new QueueWorker<TSource>(null, (s, i) => localBody(s)))
+//                {
+//                    worker.RunAsync(GetThreadCount(maxThreads), typeof(ParallelEx).Name);
+//                    foreach (TSource s in source)
+//                    {
+//                        if (worker.Exception != null)
+//                            break;
+//                        worker.Add(s);
+//                    }
+//                    worker.DoneAdding(true);
+//                    if (worker.Exception != null)
+//                        throw new AggregateException("Exception in Parallel.ForEx", worker.Exception);  // Not L10N
+//                }
+//            }, catchClause);
+            LoopWithExceptionHandling(() => Parallel.ForEach(source, PARALLEL_OPTIONS, localBody), catchClause);
         }
 
         private static void LoopWithExceptionHandling(Action loop, Action<AggregateException> catchClause)
