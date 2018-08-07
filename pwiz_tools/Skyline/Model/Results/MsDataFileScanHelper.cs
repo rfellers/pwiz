@@ -21,13 +21,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using pwiz.Common.SystemUtil;
 using pwiz.ProteowizardWrapper;
 using pwiz.Skyline.Properties;
 using pwiz.Skyline.Util;
 
 namespace pwiz.Skyline.Model.Results
 {
-    public class MsDataFileScanHelper : IDisposable
+    public class MsDataFileScanHelper : MustDispose
     {
         public MsDataFileScanHelper(Action<MsDataSpectrum[]> successAction, Action<Exception> failureAction)
         {
@@ -404,8 +405,9 @@ namespace pwiz.Skyline.Model.Results
             }
         }
 
-        public void Dispose()
+        public override void Dispose()
         {
+            base.Dispose();
             if (ScanProvider != null)
                 ScanProvider.Dispose();
             ScanProvider = null;

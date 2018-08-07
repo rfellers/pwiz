@@ -17,12 +17,21 @@
  * limitations under the License.
  */
 using System;
+using System.Diagnostics;
 
 namespace pwiz.Common.SystemUtil
 {
     public class MustDispose : IDisposable
     {
         private bool _disposed;
+
+        ~MustDispose()
+        {
+            if (!IsDisposed())
+            {
+                Trace.TraceError("Dispose not called on {0}", GetType().FullName);
+            }
+        }
         public bool IsDisposed()
         {
             lock(this)
