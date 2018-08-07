@@ -46,10 +46,11 @@ namespace pwiz.Skyline.Controls.Graphs
         private readonly QueueWorker<Action> _rowUpdateQueue = new QueueWorker<Action>(null, (a, i) => a());
         private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
 
-        public AlignmentForm(SkylineWindow skylineWindow)
+        public AlignmentForm(IDocumentUIContainer documentContainer)
         {
             InitializeComponent();
-            SkylineWindow = skylineWindow;
+            _documentContainer = documentContainer;
+            _stateProvider = documentContainer as GraphSummary.IStateProvider;
             Icon = Resources.Skyline;
             bindingSource.DataSource = _dataRows;
             colIntercept.CellTemplate.Style.Format = "0.0000"; // Not L10N  
@@ -65,32 +66,32 @@ namespace pwiz.Skyline.Controls.Graphs
             zedGraphControl.GraphPane.XAxis.MajorTic.IsOpposite = false;
             zedGraphControl.GraphPane.XAxis.MinorTic.IsOpposite = false;
             zedGraphControl.GraphPane.Chart.Border.IsVisible = false;
+            zedGraphControl.IsZoomOnMouseCenter = true;
 
             _rowUpdateQueue.RunAsync(ParallelEx.GetThreadCount(), "Alignment Rows");
         }
 
         private PlotTypeRT _plotType;
+        private readonly IDocumentUIContainer _documentContainer;
+        private readonly GraphSummary.IStateProvider _stateProvider;
 
-        public SkylineWindow SkylineWindow { get; private set; }
         public SrmDocument Document
         {
-            get { return SkylineWindow.DocumentUI; }
+            get { return _documentContainer.DocumentUI; }
         }
+
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            if (SkylineWindow != null)
-            {
-                SkylineWindow.DocumentUIChangedEvent += SkylineWindowOnDocumentUIChangedEvent;
-            }
+            if (_documentContainer != null)
+                _documentContainer.ListenUI(SkylineWindowOnDocumentUIChangedEvent);
             UpdateAll();
         }
+
         protected override void OnHandleDestroyed(EventArgs e)
         {
-            if (SkylineWindow != null)
-            {
-                SkylineWindow.DocumentUIChangedEvent -= SkylineWindowOnDocumentUIChangedEvent;
-            }
+            if (_documentContainer != null)
+                _documentContainer.UnlistenUI(SkylineWindowOnDocumentUIChangedEvent);
             _cancellationTokenSource.Cancel();
             _rowUpdateQueue.Dispose();
             base.OnHandleDestroyed(e);
@@ -111,7 +112,6 @@ namespace pwiz.Skyline.Controls.Graphs
             zedGraphControl.IsEnableVPan = zedGraphControl.IsEnableVZoom = PlotType == PlotTypeRT.residuals;
             zedGraphControl.GraphPane.CurveList.Clear();
             zedGraphControl.GraphPane.GraphObjList.Clear();
-            zedGraphControl.IsZoomOnMouseCenter = true;
             if (!(bindingSource.Current is DataRow))
             {
                 return;
@@ -121,6 +121,7 @@ namespace pwiz.Skyline.Controls.Graphs
             if (alignedFile == null)
             {
                 zedGraphControl.GraphPane.Title.Text = Resources.AlignmentForm_UpdateGraph_Waiting_for_retention_time_alignment;
+                zedGraphControl.GraphPane.XAxis.Title.Text = Resources.RTPeptideGraphPane_UpdateAxes_Time;
                 return;
             }
             var points = new PointPairList();
@@ -215,9 +216,9 @@ namespace pwiz.Skyline.Controls.Graphs
                     });
                 }
             }
-            catch (OperationCanceledException operationCanceledException)
+            catch (OperationCanceledException)
             {
-                throw new OperationCanceledException(operationCanceledException.Message, operationCanceledException, cancellationToken);
+                // Just exit this method without causing the thread to exit
             }
         }
 
@@ -272,10 +273,10 @@ namespace pwiz.Skyline.Controls.Graphs
             {
                 if (selectedIndex < 0)
                 {
-                    if (SkylineWindow.SelectedResultsIndex >= 0 && Document.Settings.HasResults)
+                    if (_stateProvider != null && _stateProvider.SelectedResultsIndex >= 0 && Document.Settings.HasResults)
                     {
                         var chromatogramSet =
-                            Document.Settings.MeasuredResults.Chromatograms[SkylineWindow.SelectedResultsIndex];
+                            Document.Settings.MeasuredResults.Chromatograms[_stateProvider.SelectedResultsIndex];
                         foreach (var msDataFileInfo in chromatogramSet.MSDataFileInfos)
                         {
                             var retentionTimeSource = documentRetentionTimes.RetentionTimeSources.Find(msDataFileInfo);
